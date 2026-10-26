@@ -30,15 +30,20 @@ the resources Windows assigns its devices, and boots on it:
   and connects the connectors straight to the QMP PHYs. With them in
   place, 7.3's ps883x fails to probe and pmic_glink_altmode waits for
   it, leaving the ports at USB 2.
-- The USB-C DisplayPort controllers stay off: DP needs the SBU muxes
-  described too, and msm binds the internal panel only once every DP
-  controller has, which waits for the ADSP.
+- DisplayPort over USB-C: each port's SBU lines go through a GPIO
+  mux (enable TLMM 168/179 active low, select TLMM 167/178, in the
+  DSDT's UCS0, as on the QCP), described as gpio-sbu-mux, so both DP
+  controllers are on. The sound card gets DisplayPort links for both
+  and for mdss_dp2, which drives the HDMI bridge. Tested on a Dell
+  U3421WE: 3440x1440 with sound on either USB-C port and over HDMI.
+  For the panel and LUKS prompt to come up before the root is
+  unlocked, the initramfs needs pmic_glink_altmode and gpio_sbu_mux.
 
 Signed-off-by: Emir Beganovic <beganovic.emir@gmail.com>
 ---
  arch/arm64/boot/dts/qcom/Makefile             |   2 +
- .../x1p42100-asus-zenbook-14-ux3480qa.dts     | 197 ++++++++++++++++++
- 2 files changed, 199 insertions(+)
+ .../x1p42100-asus-zenbook-14-ux3480qa.dts     | 315 ++++++++++++++++++
+ 2 files changed, 317 insertions(+)
  create mode 100644 arch/arm64/boot/dts/qcom/x1p42100-asus-zenbook-14-ux3480qa.dts
 
 diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
@@ -56,10 +61,10 @@ index 6f33c4e..409cf8a 100644
  x1p42100-hp-omnibook-x14-el2-dtbs := x1p42100-hp-omnibook-x14.dtb x1-el2.dtbo
 diff --git a/arch/arm64/boot/dts/qcom/x1p42100-asus-zenbook-14-ux3480qa.dts b/arch/arm64/boot/dts/qcom/x1p42100-asus-zenbook-14-ux3480qa.dts
 new file mode 100644
-index 0000000..42a3fed
+index 0000000..d4868f8
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/x1p42100-asus-zenbook-14-ux3480qa.dts
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,315 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * ASUS Zenbook 14 (UX3480QA), Snapdragon X X1-26-100 (Purwa).
@@ -85,6 +90,9 @@ index 0000000..42a3fed
 +	/delete-node/ leds;
 +
 +	/*
++	 * Sound over both USB-C DisplayPort controllers and HDMI (mdss_dp2,
++	 * through the HDMI bridge), as on the ThinkPad T14s.
++	 *
 +	 * The internal microphones on VA DMIC0/1 are powered from the WCD938x's
 +	 * MIC BIAS3, as on Qualcomm's X1 reference designs, not from MIC BIAS1
 +	 * like the A14's: with MIC BIAS3 on, both record a 1 kHz tone played on
@@ -99,6 +107,54 @@ index 0000000..42a3fed
 +				"VA DMIC0", "MIC BIAS3",
 +				"VA DMIC1", "MIC BIAS3",
 +				"TX SWR_INPUT1", "ADC2_OUTPUT";
++
++		displayport-0-dai-link {
++			link-name = "DisplayPort0 Playback";
++
++			codec {
++				sound-dai = <&mdss_dp0>;
++			};
++
++			cpu {
++				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
++			};
++
++			platform {
++				sound-dai = <&q6apm>;
++			};
++		};
++
++		displayport-1-dai-link {
++			link-name = "DisplayPort1 Playback";
++
++			codec {
++				sound-dai = <&mdss_dp1>;
++			};
++
++			cpu {
++				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_1>;
++			};
++
++			platform {
++				sound-dai = <&q6apm>;
++			};
++		};
++
++		displayport-2-dai-link {
++			link-name = "DisplayPort2 Playback";
++
++			codec {
++				sound-dai = <&mdss_dp2>;
++			};
++
++			cpu {
++				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_2>;
++			};
++
++			platform {
++				sound-dai = <&q6apm>;
++			};
++		};
 +	};
 +};
 +
@@ -170,8 +226,10 @@ index 0000000..42a3fed
 + * The USB-C ports are USB 3.2 Gen 2 without USB4, and there are no PS8833
 + * retimers: nothing answers on i2c3 or i2c7 at any address, and with the
 + * retimers' rails off and reset asserted a 10 Gb/s device links in both
-+ * orientations. The QMP PHYs connect to the connectors directly and switch
-+ * orientation themselves.
++ * orientations. The QMP PHYs connect to the connectors directly, and
++ * TLMM 167/168 and 178/179 (in the DSDT's UCS0) drive SBU muxes as on the
++ * QCP; 168 and 179 read high with the internal pull-down, an active-low
++ * enable pulled up on the board.
 + */
 +/delete-node/ &vreg_rtmr0_1p15;
 +/delete-node/ &vreg_rtmr0_1p8;
@@ -179,6 +237,46 @@ index 0000000..42a3fed
 +/delete-node/ &vreg_rtmr1_1p15;
 +/delete-node/ &vreg_rtmr1_1p8;
 +/delete-node/ &vreg_rtmr1_3p3;
++
++/ {
++	usb-1-ss0-sbu-mux {
++		compatible = "onnn,fsusb42", "gpio-sbu-mux";
++
++		enable-gpios = <&tlmm 168 GPIO_ACTIVE_LOW>;
++		select-gpios = <&tlmm 167 GPIO_ACTIVE_HIGH>;
++
++		pinctrl-0 = <&usb_1_ss0_sbu_default>;
++		pinctrl-names = "default";
++
++		mode-switch;
++		orientation-switch;
++
++		port {
++			usb_1_ss0_sbu_mux: endpoint {
++				remote-endpoint = <&pmic_glink_ss0_con_sbu_in>;
++			};
++		};
++	};
++
++	usb-1-ss1-sbu-mux {
++		compatible = "onnn,fsusb42", "gpio-sbu-mux";
++
++		enable-gpios = <&tlmm 179 GPIO_ACTIVE_LOW>;
++		select-gpios = <&tlmm 178 GPIO_ACTIVE_HIGH>;
++
++		pinctrl-0 = <&usb_1_ss1_sbu_default>;
++		pinctrl-names = "default";
++
++		mode-switch;
++		orientation-switch;
++
++		port {
++			usb_1_ss1_sbu_mux: endpoint {
++				remote-endpoint = <&pmic_glink_ss1_con_sbu_in>;
++			};
++		};
++	};
++};
 +
 +&i2c3 {
 +	/delete-node/ typec-mux@8;
@@ -188,15 +286,20 @@ index 0000000..42a3fed
 +	/delete-node/ typec-mux@8;
 +};
 +
-+/delete-node/ &pmic_glink_ss0_con_sbu_in;
-+/delete-node/ &pmic_glink_ss1_con_sbu_in;
-+
 +&pmic_glink_ss0_ss_in {
 +	remote-endpoint = <&usb_1_ss0_qmpphy_out>;
 +};
 +
++&pmic_glink_ss0_con_sbu_in {
++	remote-endpoint = <&usb_1_ss0_sbu_mux>;
++};
++
 +&pmic_glink_ss1_ss_in {
 +	remote-endpoint = <&usb_1_ss1_qmpphy_out>;
++};
++
++&pmic_glink_ss1_con_sbu_in {
++	remote-endpoint = <&usb_1_ss1_sbu_mux>;
 +};
 +
 +&usb_1_ss0_qmpphy_out {
@@ -205,20 +308,6 @@ index 0000000..42a3fed
 +
 +&usb_1_ss1_qmpphy_out {
 +	remote-endpoint = <&pmic_glink_ss1_ss_in>;
-+};
-+
-+/*
-+ * DisplayPort over USB-C needs the SBU muxes described as well (TLMM 166-168
-+ * and 177-179 in the DSDT's UCS0). msm also waits for every DP controller,
-+ * and theirs bind only once the ADSP is up, after the root is unlocked: the
-+ * LUKS prompt would go dark. Off until both are solved.
-+ */
-+&mdss_dp0 {
-+	status = "disabled";
-+};
-+
-+&mdss_dp1 {
-+	status = "disabled";
 +};
 +
 +/*
@@ -240,6 +329,40 @@ index 0000000..42a3fed
 +		drive-strength = <2>;
 +		bias-pull-up;
 +		output-low;
++	};
++
++	usb_1_ss0_sbu_default: usb-1-ss0-sbu-state {
++		oe-n-pins {
++			pins = "gpio168";
++			function = "gpio";
++			bias-disable;
++			drive-strength = <2>;
++			output-high;
++		};
++
++		sel-pins {
++			pins = "gpio167";
++			function = "gpio";
++			bias-disable;
++			drive-strength = <2>;
++		};
++	};
++
++	usb_1_ss1_sbu_default: usb-1-ss1-sbu-state {
++		oe-n-pins {
++			pins = "gpio179";
++			function = "gpio";
++			bias-disable;
++			drive-strength = <2>;
++			output-high;
++		};
++
++		sel-pins {
++			pins = "gpio178";
++			function = "gpio";
++			bias-disable;
++			drive-strength = <2>;
++		};
 +	};
 +};
 +
