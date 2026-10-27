@@ -7,7 +7,6 @@ pkgdesc='Read EPUB and PDF books, after Apple Books, with the best of Kindle'
 arch=('x86_64' 'aarch64')
 url='https://github.com/jvandenbos/nell'
 license=('MIT')
-install='nell.install'
 options=('!debug')
 depends=(
   'hicolor-icon-theme'
