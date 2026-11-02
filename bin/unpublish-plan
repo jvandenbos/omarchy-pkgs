@@ -40,7 +40,7 @@ done
 # a recipe missing from the lookup would read as gone and be retired.
 recipe_pkgbase() { # recipe_pkgbase <pkgdir> <arch>
   (cd "$1" && env -u OMARCHY_SRC CARCH="$2" bash -c '
-    source PKGBUILD >/dev/null 2>&1 || exit 1
+    source ./PKGBUILD >/dev/null 2>&1 || exit 1
     base=${pkgbase:-${pkgname[0]:-}}
     [[ -n $base ]] && printf "%s\n" "$base"
   ')

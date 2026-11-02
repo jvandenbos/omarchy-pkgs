@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Plan a run or build one planned package in an isolated container.
 # Unscoped edge builds exclude skip_build packages. Stable also requires the fast release ring.
 # Explicit --package selections may build packages with skip_build=true.
@@ -274,8 +274,8 @@ refresh_vcs_pkgver_preserving_local_pkgrel() {
   grep -qE '^pkgver[[:space:]]*\(\)' "$pkgbuild" || return 0
 
   local original_pkgver original_pkgrel refreshed_pkgver refreshed_pkgrel
-  original_pkgver=$(bash -c 'source PKGBUILD 2>/dev/null; echo "${pkgver:-}"')
-  original_pkgrel=$(bash -c 'source PKGBUILD 2>/dev/null; echo "${pkgrel:-}"')
+  original_pkgver=$(bash -c 'source ./PKGBUILD 2>/dev/null; echo "${pkgver:-}"')
+  original_pkgrel=$(bash -c 'source ./PKGBUILD 2>/dev/null; echo "${pkgrel:-}"')
 
   # Omarchy local rebuilds use dotted pkgrels (AUR pkgrel + .suffix). Plain
   # integer pkgrels can keep makepkg's normal reset-to-1 behavior on new VCS
@@ -294,8 +294,8 @@ refresh_vcs_pkgver_preserving_local_pkgrel() {
     return 1
   fi
 
-  refreshed_pkgver=$(bash -c 'source PKGBUILD 2>/dev/null; echo "${pkgver:-}"')
-  refreshed_pkgrel=$(bash -c 'source PKGBUILD 2>/dev/null; echo "${pkgrel:-}"')
+  refreshed_pkgver=$(bash -c 'source ./PKGBUILD 2>/dev/null; echo "${pkgver:-}"')
+  refreshed_pkgrel=$(bash -c 'source ./PKGBUILD 2>/dev/null; echo "${pkgrel:-}"')
 
   if [[ "$refreshed_pkgrel" != "$original_pkgrel" ]]; then
     sed -i "s/^pkgrel=.*/pkgrel=$original_pkgrel/" PKGBUILD
@@ -317,7 +317,7 @@ install_deferred_build_dependencies() {
 
   mapfile -t build_deps < <(
     CARCH="$ARCH" bash -c '
-      source PKGBUILD
+      source ./PKGBUILD
       arch_makedepends="makedepends_${CARCH}[@]"
       arch_checkdepends="checkdepends_${CARCH}[@]"
       printf "%s\n" \
@@ -367,7 +367,7 @@ build_package() {
   }
 
   # Get PKGBUILD version (including epoch if present)
-  local pkgbuild_version=$(bash -c 'source PKGBUILD; if [[ -n "$epoch" ]]; then echo "${epoch}:${pkgver}-${pkgrel}"; else echo "${pkgver}-${pkgrel}"; fi' 2>/dev/null)
+  local pkgbuild_version=$(bash -c 'source ./PKGBUILD; if [[ -n "$epoch" ]]; then echo "${epoch}:${pkgver}-${pkgrel}"; else echo "${pkgver}-${pkgrel}"; fi' 2>/dev/null)
 
   if [[ -z "$pkgbuild_version" ]]; then
     echo "    Failed to read PKGBUILD version"
@@ -383,7 +383,7 @@ build_package() {
   fi
 
   # Import PGP keys from PKGBUILD validpgpkeys and keys/pgp/ directory
-  local pgp_keys=$(bash -c 'source PKGBUILD 2>/dev/null; echo "${validpgpkeys[@]}"')
+  local pgp_keys=$(bash -c 'source ./PKGBUILD 2>/dev/null; echo "${validpgpkeys[@]}"')
   if [[ -n "$pgp_keys" ]]; then
     echo "    Importing PGP keys from validpgpkeys..."
     for key in $pgp_keys; do
@@ -521,8 +521,8 @@ check_vcs_unchanged() {
   [[ -z "$local_version" ]] && return 1
 
   # If epoch or pkgrel changed in PKGBUILD, rebuild even if upstream is unchanged
-  local pkgbuild_epoch=$(cd "$pkgdir" && bash -c 'source PKGBUILD 2>/dev/null; echo "${epoch:-}"')
-  local pkgbuild_pkgrel=$(cd "$pkgdir" && bash -c 'source PKGBUILD 2>/dev/null; echo "${pkgrel}"')
+  local pkgbuild_epoch=$(cd "$pkgdir" && bash -c 'source ./PKGBUILD 2>/dev/null; echo "${epoch:-}"')
+  local pkgbuild_pkgrel=$(cd "$pkgdir" && bash -c 'source ./PKGBUILD 2>/dev/null; echo "${pkgrel}"')
 
   local prod_pkgrel="${local_version##*-}"
   local prod_no_pkgrel="${local_version%-*}"
@@ -555,7 +555,7 @@ check_needs_build() {
   [[ ! -f "$pkgbuild" ]] && return 1
 
   # Get PKGBUILD version (including epoch if present)
-  local pkgbuild_version=$(cd "$pkgdir" && bash -c 'source PKGBUILD; if [[ -n "$epoch" ]]; then echo "${epoch}:${pkgver}-${pkgrel}"; else echo "${pkgver}-${pkgrel}"; fi' 2>/dev/null)
+  local pkgbuild_version=$(cd "$pkgdir" && bash -c 'source ./PKGBUILD; if [[ -n "$epoch" ]]; then echo "${epoch}:${pkgver}-${pkgrel}"; else echo "${pkgver}-${pkgrel}"; fi' 2>/dev/null)
   [[ -z "$pkgbuild_version" ]] && return 1
 
   # Check if already built

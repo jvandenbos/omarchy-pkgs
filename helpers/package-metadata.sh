@@ -150,7 +150,7 @@ package_has_pkgbuild() {
 # never equals the published one, so the package is queued for a rebuild that
 # promotion then refuses. Every read of a PKGBUILD goes through here.
 #
-# Prints the value; exit status is that of `source PKGBUILD` itself, so a
+# Prints the value; exit status is that of `source ./PKGBUILD` itself, so a
 # caller can tell "variable empty" from "PKGBUILD could not be read".
 package_pkgbuild_var() {
   local pkgdir="$1"
@@ -158,7 +158,7 @@ package_pkgbuild_var() {
   local arch="${3:-${ARCH:-x86_64}}"
 
   (cd "$pkgdir" && env -u OMARCHY_SRC CARCH="$arch" bash -c '
-    source PKGBUILD >/dev/null 2>&1
+    source ./PKGBUILD >/dev/null 2>&1
     rc=$?
     printf "%s\n" "${!1:-}"
     exit "$rc"
@@ -183,7 +183,7 @@ package_arches() {
   local arch="${2:-${ARCH:-x86_64}}"
 
   (cd "$pkgdir" && env -u OMARCHY_SRC CARCH="$arch" bash -c '
-    source PKGBUILD >/dev/null 2>&1
+    source ./PKGBUILD >/dev/null 2>&1
     printf "%s\n" "${arch[*]}"
   ')
 }
@@ -383,7 +383,7 @@ package_first_git_source() {
   local pkgdir="$1"
 
   (cd "$pkgdir" && env -u OMARCHY_SRC bash -c '
-    source PKGBUILD 2>/dev/null
+    source ./PKGBUILD 2>/dev/null
     for s in "${source[@]}"; do
       url="${s#*::}"
       [[ "$url" == git+* ]] && { echo "${url#git+}"; break; }
